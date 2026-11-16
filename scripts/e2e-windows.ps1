@@ -26,7 +26,8 @@ Write-Host '== Instalación silenciosa'
 $p = Start-Process -FilePath $Installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/LOG=install.log' -Wait -PassThru
 if ($p.ExitCode -ne 0) { Get-Content install.log | Select-Object -Last 40; throw "El instalador devolvió $($p.ExitCode)" }
 $svc = Get-Service TPVPrintService
-if ($svc.Status -ne 'Running') { throw "El servicio está $($svc.Status)" }
+# El instalador termina con el servicio en StartPending; se da hasta 30 s para que pase a Running.
+try { $svc.WaitForStatus('Running', [TimeSpan]::FromSeconds(30)) } catch { throw "El servicio sigue en $((Get-Service TPVPrintService).Status)" }
 Write-Host "Servicio: $($svc.Status) ($((Get-CimInstance Win32_Service -Filter "Name='TPVPrintService'").StartName))"
 
 Write-Host '== HTTPS con certificado de confianza'

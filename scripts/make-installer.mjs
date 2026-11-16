@@ -32,7 +32,8 @@ try {
 }
 await fs.cp(path.join(root, 'node_modules', 'koffi'), path.join(stage, 'app', 'node_modules', 'koffi'), {
   recursive: true,
-  filter: (src) => !src.includes(`${path.sep}src${path.sep}`) && !src.includes(`${path.sep}doc${path.sep}`)
+  // Solo se omite la documentación: index.cjs carga ./src/koffi/index.cjs en tiempo de ejecución.
+  filter: (src) => !src.includes(`${path.sep}koffi${path.sep}doc`)
 })
 await fs.cp(koffiNative, path.join(stage, 'app', 'node_modules', '@koromix', 'koffi-win32-x64'), { recursive: true })
 
