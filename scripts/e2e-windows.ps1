@@ -35,6 +35,16 @@ Write-Host '== HTTPS con certificado de confianza'
 $health = Wait-Health 3000
 Write-Host ($health | ConvertTo-Json -Compress)
 
+Write-Host '== HTTPS en Chromium (Edge): su lector de certificados es más estricto que el de Windows'
+$edge = @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe", "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $edge) { throw 'No se encuentra Edge en el runner' }
+$profileDir = Join-Path $env:RUNNER_TEMP 'edge-e2e'
+$errFile = Join-Path $env:RUNNER_TEMP 'edge-e2e.err'
+$dom = & $edge --headless=new --disable-gpu --no-first-run "--user-data-dir=$profileDir" --enable-logging=stderr --dump-dom https://127.0.0.1:3000/health 2> $errFile | Out-String
+$netError = Select-String -Path $errFile -Pattern 'net_error -\d+|net::ERR_\w+' | Select-Object -First 1
+if ($netError -or $dom -notmatch '"ok":true') { Get-Content $errFile | Select-Object -Last 20; throw "Edge no acepta la conexión HTTPS con el agente: $netError" }
+Write-Host 'Edge abre https://127.0.0.1:3000 sin errores de certificado'
+
 Write-Host '== Icono de la bandeja'
 $tray = "${env:ProgramFiles}\TPV Print Service\tray\TPVPrintTray.exe"
 if (-not (Test-Path $tray)) { throw 'No se ha instalado TPVPrintTray.exe' }

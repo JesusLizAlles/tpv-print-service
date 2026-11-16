@@ -10,6 +10,9 @@ import path from 'node:path'
 import { execFile } from 'node:child_process'
 import forge from 'node-forge'
 
+// @types/node-forge declara valueTagClass como asn1.Class, pero node-forge espera un asn1.Type.
+const UTF8 = forge.asn1.Type.UTF8 as unknown as forge.asn1.Class
+
 export interface TlsFiles {
   dir: string
   caCert: string
@@ -48,15 +51,36 @@ export function tlsStatus(files: TlsFiles): TlsStatus {
 
 const RENEW_BEFORE_MS = 60 * 24 * 3600 * 1000
 
+/**
+ * Formato del certificado. Se sube cuando cambia cómo se genera, para que la actualización lo
+ * regenere en todos los equipos.
+ *   1 (0.1.0-0.2.0): nombres en PrintableString con el nombre del equipo. Chromium (Chrome, Edge,
+ *     Brave) lo rechaza con ERR_SSL_SERVER_CERT_BAD_FORMAT si el equipo se llama p. ej. pos_malibu,
+ *     porque el guion bajo no es válido en PrintableString.
+ *   2: nombres en UTF8String, sin el nombre del equipo en el SAN y número de serie con
+ *     codificación DER mínima.
+ */
+export const CERT_FORMAT = 2
+
+function formatFile(files: TlsFiles): string {
+  return path.join(files.dir, 'format')
+}
+
 export function needsNewCertificate(files: TlsFiles): boolean {
   const st = tlsStatus(files)
   if (!st.present || !st.notAfter) return true
+  let format = 1
+  try {
+    format = Number(fs.readFileSync(formatFile(files), 'utf8').trim()) || 1
+  } catch {
+    // certificados de antes de que existiera el fichero: formato 1
+  }
+  if (format < CERT_FORMAT) return true
   return new Date(st.notAfter).getTime() - Date.now() < RENEW_BEFORE_MS
 }
 
 /** Genera CA + certificado de servidor. Devuelve el número de serie de la CA nueva. */
-export function generateCertificates(files: TlsFiles): string {
-  const host = os.hostname()
+export function generateCertificates(files: TlsFiles, host = os.hostname()): string {
   const now = new Date()
 
   const caKeys = forgeKeyPair()
@@ -65,9 +89,11 @@ export function generateCertificates(files: TlsFiles): string {
   ca.serialNumber = randomSerial()
   ca.validity.notBefore = new Date(now.getTime() - 3600_000)
   ca.validity.notAfter = addYears(now, 10)
+  // UTF8String: PrintableString no admite guion bajo ni acentos, y el nombre del equipo puede
+  // tenerlos (pos_malibu). Chromium valida el juego de caracteres y rechaza el certificado.
   const caAttrs = [
-    { name: 'commonName', value: `TPV Print Service CA (${host})` },
-    { name: 'organizationName', value: 'TPV Print Service' }
+    { name: 'commonName', value: `TPV Print Service CA (${host})`, valueTagClass: UTF8 },
+    { name: 'organizationName', value: 'TPV Print Service', valueTagClass: UTF8 }
   ]
   ca.setSubject(caAttrs)
   ca.setIssuer(caAttrs)
@@ -84,7 +110,7 @@ export function generateCertificates(files: TlsFiles): string {
   leaf.serialNumber = randomSerial()
   leaf.validity.notBefore = new Date(now.getTime() - 3600_000)
   leaf.validity.notAfter = addYears(now, 5)
-  leaf.setSubject([{ name: 'commonName', value: '127.0.0.1' }])
+  leaf.setSubject([{ name: 'commonName', value: '127.0.0.1', valueTagClass: UTF8 }])
   leaf.setIssuer(caAttrs)
   leaf.setExtensions([
     { name: 'basicConstraints', cA: false },
@@ -95,8 +121,9 @@ export function generateCertificates(files: TlsFiles): string {
       altNames: [
         { type: 7, ip: '127.0.0.1' },
         { type: 7, ip: '::1' },
-        { type: 2, value: 'localhost' },
-        { type: 2, value: host.toLowerCase() }
+        // Sin el nombre del equipo: la web del TPV llama a 127.0.0.1, y un nombre con guion bajo
+        // o acentos no es un dNSName válido.
+        { type: 2, value: 'localhost' }
       ]
     },
     { name: 'authorityKeyIdentifier', keyIdentifier: ca.generateSubjectKeyIdentifier().getBytes() }
@@ -107,6 +134,7 @@ export function generateCertificates(files: TlsFiles): string {
   fs.writeFileSync(files.caCert, forge.pki.certificateToPem(ca))
   fs.writeFileSync(files.cert, forge.pki.certificateToPem(leaf))
   fs.writeFileSync(files.key, forge.pki.privateKeyToPem(leafKeys.privateKey), { mode: 0o600 })
+  fs.writeFileSync(formatFile(files), String(CERT_FORMAT))
   // caKeys.privateKey no se guarda: sale de memoria al terminar la función.
   return new crypto.X509Certificate(fs.readFileSync(files.caCert)).serialNumber
 }
@@ -132,9 +160,10 @@ function forgeKeyPair(): forge.pki.rsa.KeyPair {
 }
 
 function randomSerial(): string {
-  // Positivo (primer bit a 0) y de 16 bytes, como pide la RFC 5280.
+  // 16 bytes, positivo y con codificación DER mínima: el primer byte entre 0x40 y 0x7f (ni bit de
+  // signo ni ceros a la izquierda, que Chromium rechaza).
   const b = crypto.randomBytes(16)
-  b[0] = b[0]! & 0x7f
+  b[0] = 0x40 | (b[0]! & 0x3f)
   return b.toString('hex')
 }
 
