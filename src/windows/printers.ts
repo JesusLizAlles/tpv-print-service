@@ -1,5 +1,5 @@
 // Impresoras instaladas en este Windows (nombre, recurso compartido, puerto), leídas con
-// PowerShell Get-Printer y guardadas un minuto para no lanzar PowerShell en cada ticket.
+// PowerShell Get-Printer.
 import { execFile } from 'node:child_process'
 
 export interface WindowsPrinter {
@@ -11,25 +11,53 @@ export interface WindowsPrinter {
 }
 
 let cache: { at: number; printers: WindowsPrinter[] } | null = null
+let refreshing: Promise<WindowsPrinter[]> | null = null
 const TTL_MS = 60_000
 
+/**
+ * Lista de impresoras. Lanzar PowerShell cuesta 2-4 s, así que ningún ticket lo espera salvo la
+ * primera vez: con la lista caducada se devuelve la guardada y se refresca en segundo plano.
+ * `force` espera a una lista recién leída (panel, o impresora que no aparece).
+ */
 export async function listWindowsPrinters(force = false): Promise<WindowsPrinter[]> {
   if (process.platform !== 'win32') return []
-  if (!force && cache && Date.now() - cache.at < TTL_MS) return cache.printers
+  if (!force && cache) {
+    if (Date.now() - cache.at >= TTL_MS) void refresh().catch(() => undefined)
+    return cache.printers
+  }
+  return refresh()
+}
+
+/** Carga la lista al arrancar el agente, para que el primer ticket no espere. */
+export function warmPrinterCache(): void {
+  if (process.platform === 'win32') void refresh().catch(() => undefined)
+}
+
+function refresh(): Promise<WindowsPrinter[]> {
+  refreshing ??= readPrinters()
+    .then((printers) => {
+      cache = { at: Date.now(), printers }
+      return printers
+    })
+    .finally(() => {
+      refreshing = null
+    })
+  return refreshing
+}
+
+async function readPrinters(): Promise<WindowsPrinter[]> {
   const out = await powershell(
     'Get-Printer | Select-Object Name,ShareName,Shared,PortName,DriverName | ConvertTo-Json -Compress'
   )
   const parsed: unknown = out.trim() ? JSON.parse(out) : []
   const rows = (Array.isArray(parsed) ? parsed : [parsed]) as Record<string, unknown>[]
-  const printers = rows.map((r) => ({
+  return rows.map((r) => ({
     name: String(r.Name ?? ''),
     shareName: r.ShareName ? String(r.ShareName) : null,
     shared: Boolean(r.Shared),
     portName: String(r.PortName ?? ''),
     driverName: String(r.DriverName ?? '')
   }))
-  cache = { at: Date.now(), printers }
-  return printers
 }
 
 export async function findLocalPrinterByShare(share: string): Promise<string | null> {

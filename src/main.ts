@@ -16,6 +16,7 @@ import { createServer } from './server.js'
 import { generateCertificates, needsNewCertificate, tlsFiles, tlsStatus, trustCa, untrustCa } from './tls.js'
 import { Updater } from './updater.js'
 import { PRODUCT, VERSION } from './version.js'
+import { warmPrinterCache } from './windows/printers.js'
 
 /** Código de salida con el que el agente pide a WinSW que lo vuelva a arrancar. */
 const EXIT_RESTART = 3
@@ -96,6 +97,7 @@ async function run(): Promise<void> {
     log('info', 'sistema', `API local en ${tls ? 'https' : 'http'}://${cfg.listenHost}:${cfg.port}`)
   })
 
+  warmPrinterCache()
   agent.start()
   updater.start()
 
