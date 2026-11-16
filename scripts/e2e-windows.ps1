@@ -1,8 +1,9 @@
 # Prueba completa en Windows (runner de GitHub Actions, como administrador):
 #   1. Instala el .exe en silencio y comprueba que el servicio arranca.
 #   2. Llama a /health por HTTPS validando el certificado con el almacén de Windows.
-#   3. Crea una impresora "Generic / Text Only" con puerto a fichero, la comparte como "tickets"
-#      e imprime por nombre de Windows y por \\EQUIPO\tickets (lo que hay hoy en la base de datos).
+#   3. Crea una impresora "Generic / Text Only" en pausa, la comparte como "tickets" e imprime por
+#      nombre de Windows y por \\EQUIPO\tickets (lo que hay hoy en la base de datos). Comprueba en el
+#      fichero .SPL de la cola que los bytes ESC/POS llegan en bruto.
 #      El servicio corre como LocalSystem: así se prueba la cola de Windows con koffi.
 #   4. Desinstala y comprueba que no queda el servicio.
 param([Parameter(Mandatory = $true)][string]$Installer)
@@ -38,7 +39,7 @@ Write-Host '== Permisos: credentials y clave TLS fuera del alcance de Usuarios'
 $acl = (Get-Acl "$env:ProgramData\TPVPrint\private").Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }
 if ($acl -contains 'S-1-5-32-545') { throw 'private\ es legible por Usuarios' }
 
-Write-Host '== Impresora de Windows con puerto a fichero'
+Write-Host '== Impresora de Windows (en pausa: los trabajos se quedan en la cola para leerlos)'
 $out = 'C:\tpvprint-e2e\out.prn'
 New-Item -ItemType Directory -Force -Path (Split-Path $out) | Out-Null
 Get-Service Spooler | Where-Object Status -ne 'Running' | Start-Service
@@ -46,27 +47,46 @@ Add-PrinterDriver -Name 'Generic / Text Only'
 Add-PrinterPort -Name $out
 Add-Printer -Name 'TPV E2E' -DriverName 'Generic / Text Only' -PortName $out
 Set-Printer -Name 'TPV E2E' -Shared $true -ShareName 'tickets'
+Get-CimInstance Win32_Printer -Filter "Name='TPV E2E'" | Invoke-CimMethod -MethodName Pause | Out-Null
+$spool = Join-Path $env:SystemRoot 'System32\spool\PRINTERS'
 
-# Un puerto local a fichero sobrescribe el fichero en cada trabajo: se comprueba uno a uno.
-function Assert-Printed([string]$Marker, [string]$What) {
-  $deadline = (Get-Date).AddSeconds(30)
+function Show-SpoolerState {
+  Write-Host '-- Diagnóstico de la cola'
+  Get-Printer -Name 'TPV E2E' | Format-List Name, ShareName, PortName, DriverName, PrinterStatus, Datatype | Out-String | Write-Host
+  Get-PrintJob -PrinterName 'TPV E2E' -ErrorAction SilentlyContinue | Format-Table Id, DocumentName, Datatype, Size, JobStatus | Out-String | Write-Host
+  Get-ChildItem $spool -ErrorAction SilentlyContinue | Format-Table Name, Length, LastWriteTime | Out-String | Write-Host
+  Get-WinEvent -LogName 'Microsoft-Windows-PrintService/Admin' -MaxEvents 10 -ErrorAction SilentlyContinue | Format-List TimeCreated, Id, Message | Out-String | Write-Host
+}
+
+# El trabajo debe aparecer en la cola de "TPV E2E" con los bytes ESC/POS tal cual (RAW) en su .SPL.
+function Assert-Spooled([string]$Marker, [string]$What) {
+  $deadline = (Get-Date).AddSeconds(20)
+  $found = $false
   do {
     Start-Sleep -Seconds 1
-    $content = if (Test-Path $out) { [IO.File]::ReadAllText($out, [Text.Encoding]::GetEncoding(28591)) } else { '' }
-  } while (-not $content.Contains($Marker) -and (Get-Date) -lt $deadline)
-  if (-not $content.Contains($Marker)) { throw "La impresión $What no llegó al puerto" }
-  if (-not $content.StartsWith([string][char]0x1b + '@')) { throw "Impresión $What`: los bytes no llegan en bruto (falta ESC @ al principio)" }
-  Write-Host "Impresión $What`: $($content.Length) bytes en bruto en $out"
-  Remove-Item $out -ErrorAction SilentlyContinue
+    foreach ($f in Get-ChildItem $spool -Filter '*.SPL' -ErrorAction SilentlyContinue) {
+      $bytes = [IO.File]::ReadAllBytes($f.FullName)
+      $text = [Text.Encoding]::GetEncoding(28591).GetString($bytes)
+      if ($text.Contains($Marker)) {
+        if (-not $text.StartsWith([string][char]0x1b + '@')) { Show-SpoolerState; throw "Impresión $What`: los bytes no llegan en bruto (falta ESC @ al principio)" }
+        Write-Host "Impresión $What`: $($bytes.Length) bytes en bruto en la cola ($($f.Name))"
+        $found = $true
+        break
+      }
+    }
+  } while (-not $found -and (Get-Date) -lt $deadline)
+  if (-not $found) { Show-SpoolerState; throw "La impresión $What no llegó a la cola de Windows" }
+  Get-PrintJob -PrinterName 'TPV E2E' | Remove-PrintJob
+  Start-Sleep -Seconds 1
 }
 
 $r = Send-Job @{ type = 'windows'; params = 'TPV E2E' } 'POR-NOMBRE'
 Write-Host ($r | ConvertTo-Json -Compress)
-Assert-Printed 'POR-NOMBRE' 'por nombre de Windows'
+Assert-Spooled 'POR-NOMBRE' 'por nombre de Windows'
 
 $r = Send-Job @{ type = 'file'; params = "\\$env:COMPUTERNAME\tickets" } 'POR-RECURSO-COMPARTIDO'
 Write-Host ($r | ConvertTo-Json -Compress)
-Assert-Printed 'POR-RECURSO-COMPARTIDO' 'por \\EQUIPO\recurso'
+Assert-Spooled 'POR-RECURSO-COMPARTIDO' 'por \\EQUIPO\recurso'
 
 Write-Host '== Desinstalación'
 $uninstaller = Get-ChildItem "${env:ProgramFiles}\TPV Print Service\unins*.exe" | Select-Object -First 1
