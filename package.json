@@ -1,7 +1,7 @@
 {
   "name": "tpv-print-service",
   "productName": "TPV Print Service",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Agente de impresión para el TPV de SET Hotels: servicio de Windows que imprime tickets y comandas en impresoras ESC/POS",
   "private": true,
   "type": "module",

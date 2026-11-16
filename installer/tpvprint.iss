@@ -60,7 +60,12 @@ Name: "{#DataDir}\updates"
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\TPV Print Service\Configurar impresión"; Filename: "{app}\node\node.exe"; Parameters: """{app}\app\agent.cjs"" open-admin"; WorkingDir: "{app}\app"; IconFilename: "{sys}\shell32.dll"; IconIndex: 16; Flags: runminimized
+Name: "{autoprograms}\TPV Print Service\Configurar impresión"; Filename: "{app}\tray\TPVPrintTray.exe"; Parameters: "--open-panel"; IconFilename: "{sys}\shell32.dll"; IconIndex: 16
+Name: "{autoprograms}\TPV Print Service\Icono de estado"; Filename: "{app}\tray\TPVPrintTray.exe"
+
+[Registry]
+; Icono junto al reloj en cada inicio de sesión (todos los usuarios).
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "TPVPrintServiceTray"; ValueData: """{app}\tray\TPVPrintTray.exe"""; Flags: uninsdeletevalue
 
 [Run]
 ; Permisos de los datos (SID, para que funcione con Windows en cualquier idioma):
@@ -73,9 +78,13 @@ Filename: "{app}\node\node.exe"; Parameters: """{app}\app\agent.cjs"" setup {cod
 ; Registrar (solo la primera vez) y arrancar el servicio.
 Filename: "{app}\{#ServiceExe}"; Parameters: "install"; Flags: runhidden waituntilterminated; Check: not ServiceInstalled; StatusMsg: "Registrando el servicio…"
 Filename: "{app}\{#ServiceExe}"; Parameters: "start"; Flags: runhidden waituntilterminated; StatusMsg: "Arrancando el servicio…"
-Filename: "{app}\node\node.exe"; Parameters: """{app}\app\agent.cjs"" open-admin"; WorkingDir: "{app}\app"; Description: "Abrir el panel de configuración"; Flags: postinstall nowait skipifsilent runhidden
+; Icono junto al reloj en las sesiones abiertas (también tras una actualización automática).
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\tray-task.ps1"" -Exe ""{app}\tray\TPVPrintTray.exe"""; Flags: runhidden waituntilterminated; StatusMsg: "Mostrando el icono de estado…"
+Filename: "{app}\tray\TPVPrintTray.exe"; Parameters: "--open-panel"; Description: "Abrir el panel de configuración"; Flags: postinstall nowait skipifsilent runasoriginaluser
 
 [UninstallRun]
+Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM TPVPrintTray.exe"; Flags: runhidden waituntilterminated; RunOnceId: "KillTray"
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\tray-task.ps1"" -Exe x -Remove"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveTrayTask"
 Filename: "{app}\{#ServiceExe}"; Parameters: "stopwait"; Flags: runhidden waituntilterminated; RunOnceId: "StopService"
 Filename: "{app}\{#ServiceExe}"; Parameters: "uninstall"; Flags: runhidden waituntilterminated; RunOnceId: "UninstallService"
 Filename: "{app}\node\node.exe"; Parameters: """{app}\app\agent.cjs"" teardown"; Flags: runhidden waituntilterminated; RunOnceId: "Teardown"
@@ -146,6 +155,9 @@ var
   ResultCode: Integer;
 begin
   Result := '';
+  // El icono de la bandeja tiene su .exe abierto: se cierra en todas las sesiones y se vuelve a
+  // abrir al terminar (tray-task.ps1).
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM TPVPrintTray.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   // Actualización: parar el servicio para poder sustituir node.exe y el agente.
   if ServiceInstalled then
   begin

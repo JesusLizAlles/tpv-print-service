@@ -11,8 +11,12 @@ Windows** y sustituye al antiguo `servicio_impresion.py`:
   que no se pierden ni se imprimen dos veces. Ver [docs/protocolo.md](docs/protocolo.md).
 - **Instalador** `.exe` que registra el servicio, genera el certificado HTTPS de `127.0.0.1` y lo
   hace de confianza en Windows. Sin pasos manuales.
+- **Icono junto al reloj** en cada sesión de usuario: verde si todo va bien, ámbar si no llega al
+  servidor de la cola, rojo si el servicio no responde. Avisa cuando falla una impresión y da acceso
+  al panel, a los registros y a reiniciar el servicio.
 - **Panel** en `https://127.0.0.1:3000/admin` (solo desde el propio equipo): puerto, vinculación con
-  el TPV, prueba de impresora, cajón, actividad y actualizaciones.
+  el TPV, prueba de impresora, cajón, actividad y actualizaciones. Se abre con doble clic en el
+  icono o desde el menú Inicio → TPV Print Service → Configurar impresión.
 - **Actualización automática** desde las Releases de este repositorio.
 
 Los instaladores están en [Releases](https://github.com/JesusLizAlles/tpv-print-service/releases).
@@ -83,7 +87,8 @@ probar sin impresora, usa una conexión `file` a un fichero cualquiera.
 | `src/agent/` | Cliente de la cola del servidor |
 | `src/server.ts` | API local y panel (`src/admin/index.html`) |
 | `src/updater.ts` | Actualizaciones desde GitHub Releases |
-| `installer/` | Inno Setup y configuración del servicio (WinSW) |
+| `tray/` | Icono de la bandeja (C# 5, se compila con el .NET Framework de Windows) |
+| `installer/` | Inno Setup, configuración del servicio (WinSW) y arranque del icono |
 | `scripts/` | Compilación, descarga verificada de Node y WinSW, prueba completa en Windows |
 
 El instalador se compila en Windows (`npm run dist:win`, con Inno Setup 6). Lo hace el CI.

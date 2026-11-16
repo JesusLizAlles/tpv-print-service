@@ -19,6 +19,7 @@ await fs.copyFile(path.join(deps, 'WinSW-x64.exe'), path.join(stage, 'TPVPrintSe
 await fs.copyFile(path.join(root, 'installer', 'TPVPrintService.xml'), path.join(stage, 'TPVPrintService.xml'))
 await fs.copyFile(path.join(root, 'dist', 'app', 'agent.cjs'), path.join(stage, 'app', 'agent.cjs'))
 await fs.copyFile(path.join(root, 'LICENSE'), path.join(stage, 'LICENSE.txt'))
+await fs.copyFile(path.join(root, 'installer', 'tray-task.ps1'), path.join(stage, 'tray-task.ps1'))
 for (const extra of ['agent.cjs.LEGAL.txt']) {
   await fs.copyFile(path.join(root, 'dist', 'app', extra), path.join(stage, 'app', extra)).catch(() => undefined)
 }
@@ -36,6 +37,46 @@ await fs.cp(path.join(root, 'node_modules', 'koffi'), path.join(stage, 'app', 'n
   filter: (src) => !src.includes(`${path.sep}koffi${path.sep}doc`)
 })
 await fs.cp(koffiNative, path.join(stage, 'app', 'node_modules', '@koromix', 'koffi-win32-x64'), { recursive: true })
+
+// Icono de la bandeja: C# 5 con el csc.exe del .NET Framework 4 que trae Windows.
+{
+  const csc = path.join(process.env.WINDIR ?? 'C:\\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe')
+  const work = path.join(root, 'build', 'tray')
+  await fs.mkdir(work, { recursive: true })
+  await fs.mkdir(path.join(stage, 'tray'), { recursive: true })
+  const [maj, min, pat] = pkg.version.split('-')[0].split('.')
+  const info = path.join(work, 'AssemblyInfo.cs')
+  await fs.writeFile(
+    info,
+    [
+      'using System.Reflection;',
+      '[assembly: AssemblyTitle("TPV Print Service")]',
+      '[assembly: AssemblyProduct("TPV Print Service")]',
+      '[assembly: AssemblyCompany("SET Hotels")]',
+      `[assembly: AssemblyVersion("${maj}.${min}.${pat}.0")]`,
+      `[assembly: AssemblyFileVersion("${maj}.${min}.${pat}.0")]`,
+      `[assembly: AssemblyInformationalVersion("${pkg.version}")]`,
+      ''
+    ].join('\r\n')
+  )
+  execFileSync(
+    csc,
+    [
+      '/nologo',
+      '/codepage:65001',
+      '/target:winexe',
+      '/optimize+',
+      '/platform:anycpu',
+      `/out:${path.join(stage, 'tray', 'TPVPrintTray.exe')}`,
+      '/r:System.Windows.Forms.dll',
+      '/r:System.Drawing.dll',
+      '/r:System.Web.Extensions.dll',
+      path.join(root, 'tray', 'TPVPrintTray.cs'),
+      info
+    ],
+    { stdio: 'inherit' }
+  )
+}
 
 function findIscc() {
   if (process.env.ISCC) return process.env.ISCC

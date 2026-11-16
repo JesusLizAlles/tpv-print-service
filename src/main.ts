@@ -145,7 +145,9 @@ async function renewCertificate(files: ReturnType<typeof tlsFiles>): Promise<voi
 function openAdmin(): void {
   const cfg = loadConfig()
   const url = `${cfg.https ? 'https' : 'http'}://127.0.0.1:${cfg.port}/admin`
-  if (process.platform === 'win32') execFile('cmd.exe', ['/c', 'start', '', url], { windowsHide: true })
+  // Sin `cmd /c start` con windowsHide: el navegador podía abrirse oculto. FileProtocolHandler abre
+  // la URL con el navegador predeterminado, como un doble clic en un enlace.
+  if (process.platform === 'win32') execFile('rundll32.exe', ['url.dll,FileProtocolHandler', url])
   else if (process.platform === 'darwin') execFile('open', [url])
   else execFile('xdg-open', [url])
 }

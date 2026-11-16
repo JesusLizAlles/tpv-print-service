@@ -35,6 +35,16 @@ Write-Host '== HTTPS con certificado de confianza'
 $health = Wait-Health 3000
 Write-Host ($health | ConvertTo-Json -Compress)
 
+Write-Host '== Icono de la bandeja'
+$tray = "${env:ProgramFiles}\TPV Print Service\tray\TPVPrintTray.exe"
+if (-not (Test-Path $tray)) { throw 'No se ha instalado TPVPrintTray.exe' }
+$p = Start-Process -FilePath $tray -ArgumentList '--check' -Wait -PassThru
+if ($p.ExitCode -ne 0) { throw "TPVPrintTray --check devolvió $($p.ExitCode): el icono no puede leer el estado del agente (TLS, certificado o JSON)" }
+if (-not (Get-ScheduledTask -TaskName 'TPVPrintServiceTray' -ErrorAction SilentlyContinue)) { throw 'No se registró la tarea que abre el icono en las sesiones' }
+$run = Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name TPVPrintServiceTray -ErrorAction SilentlyContinue
+if (-not $run) { throw 'No se registró el icono en el inicio de sesión (clave Run)' }
+Write-Host "Icono: --check correcto; arranque en sesión registrado ($($run.TPVPrintServiceTray))"
+
 Write-Host '== Permisos: credentials y clave TLS fuera del alcance de Usuarios'
 $acl = (Get-Acl "$env:ProgramData\TPVPrint\private").Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }
 if ($acl -contains 'S-1-5-32-545') { throw 'private\ es legible por Usuarios' }
@@ -88,8 +98,18 @@ $r = Send-Job @{ type = 'file'; params = "\\$env:COMPUTERNAME\tickets" } 'POR-RE
 Write-Host ($r | ConvertTo-Json -Compress)
 Assert-Spooled 'POR-RECURSO-COMPARTIDO' 'por \\EQUIPO\recurso'
 
+Write-Host '== Reinicio del servicio y acentos en el registro'
+Restart-Service TPVPrintService
+(Get-Service TPVPrintService).WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
+Wait-Health 3000 | Out-Null
+$log = Get-Content "$env:ProgramData\TPVPrint\logs\TPVPrintService.out.log" -Raw -Encoding UTF8
+if ($log -notmatch 'señal de parada') { Write-Host $log; throw 'El registro no muestra bien los acentos (se esperaba «señal de parada»)' }
+Write-Host 'Registro en UTF-8 correcto tras reiniciar'
+
 Write-Host '== Desinstalación'
 $uninstaller = Get-ChildItem "${env:ProgramFiles}\TPV Print Service\unins*.exe" | Select-Object -First 1
 $p = Start-Process -FilePath $uninstaller.FullName -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
 if (Get-Service TPVPrintService -ErrorAction SilentlyContinue) { throw 'El servicio sigue registrado tras desinstalar' }
+if (Get-ScheduledTask -TaskName 'TPVPrintServiceTray' -ErrorAction SilentlyContinue) { throw 'La tarea del icono sigue registrada tras desinstalar' }
+if (Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name TPVPrintServiceTray -ErrorAction SilentlyContinue) { throw 'El icono sigue en el inicio de sesión tras desinstalar' }
 Write-Host 'OK'
