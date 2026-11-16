@@ -13,13 +13,13 @@ afterEach(() => {
   servers = []
 })
 
-async function start(overrides: Partial<Config> = {}, print?: (job: PrintJob) => Promise<never | { target: string; bytes: number; ms: number }>) {
+async function start(overrides: Partial<Config> = {}, print?: (job: PrintJob) => Promise<never | { target: string; bytes: number; ms: number; simulated: boolean; historyId: string }>) {
   let cfg = testConfig(overrides)
   const printed: PrintJob[] = []
   const ctx: AppContext = {
     getConfig: () => cfg,
     saveConfig: (c) => (cfg = c),
-    print: print ?? (async (job) => (printed.push(job), { target: 'x', bytes: 1, ms: 1 })),
+    print: print ?? (async (job) => (printed.push(job), { target: 'x', bytes: 1, ms: 1, simulated: false, historyId: 'h' })),
     agent: { getStatus: () => ({ state: 'sin-vincular', tpvName: null, server: null, lastContactAt: null, lastError: null, inFlight: 0, printed: 0, failed: 0 }), restart: async () => {} },
     updater: { getStatus: () => ({ current: '0', checkedAt: null, latest: null, available: false, state: 'inactivo', error: null }), check: async () => ({}) as never, install: async () => {} },
     tls: tlsFiles(tempDir()),

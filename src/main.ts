@@ -55,7 +55,7 @@ async function run(): Promise<void> {
 
   const getConfig = () => cfg
   const journal = new PrintedJournal(path.join(dataDir(), 'printed.json'))
-  const agent = new QueueAgent({ getConfig, print: (job) => printJob(job, cfg), journal })
+  const agent = new QueueAgent({ getConfig, print: (job) => printJob(job, cfg, undefined, { source: 'cola' }), journal })
   const updater = new Updater(getConfig, () => agent.getStatus().inFlight > 0)
 
   let stopping = false
@@ -76,7 +76,7 @@ async function run(): Promise<void> {
         saveConfig(next)
         cfg = next
       },
-      print: (job) => printJob(job, cfg),
+      print: (job, opts) => printJob(job, cfg, undefined, opts),
       agent,
       updater,
       tls: files,

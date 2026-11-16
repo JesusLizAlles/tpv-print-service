@@ -26,6 +26,11 @@ export interface Config {
   /** Ancho máximo de imagen en puntos: 576 en papel de 80 mm, 384 en 58 mm */
   maxImageWidth: number
   server: ServerLink | null
+  /**
+   * Modo simulación hasta esta fecha (ISO): no se imprime nada, cada trabajo solo se guarda para la
+   * vista previa. Caduca solo para que no se quede activado por descuido en producción.
+   */
+  simulateUntil: string | null
   updates: {
     auto: boolean
     /** Franja horaria local en la que se instalan las actualizaciones automáticas [inicio, fin) */
@@ -42,6 +47,7 @@ export const DEFAULT_CONFIG: Config = {
   codepage: 'cp858',
   maxImageWidth: 576,
   server: null,
+  simulateUntil: null,
   updates: { auto: true, windowStart: 4, windowEnd: 6 }
 }
 
@@ -125,6 +131,7 @@ export function sanitizeConfig(input: unknown): Config {
         ? (r.maxImageWidth as number)
         : d.maxImageWidth,
     server: sanitizeServer(r.server),
+    simulateUntil: typeof r.simulateUntil === 'string' && !Number.isNaN(Date.parse(r.simulateUntil)) ? r.simulateUntil : null,
     updates: {
       auto: typeof updates.auto === 'boolean' ? updates.auto : d.updates.auto,
       windowStart: validHour(updates.windowStart) ? (updates.windowStart as number) : d.updates.windowStart,
@@ -144,6 +151,10 @@ function sanitizeServer(v: unknown): ServerLink | null {
     tpvId: String(v.tpvId),
     tpvName: typeof v.tpvName === 'string' ? v.tpvName : ''
   }
+}
+
+export function isSimulating(cfg: Config, now = Date.now()): boolean {
+  return cfg.simulateUntil !== null && Date.parse(cfg.simulateUntil) > now
 }
 
 export function validPort(v: unknown): boolean {

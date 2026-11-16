@@ -81,6 +81,35 @@ button:disabled { opacity: .5; cursor: default; }
 .empty { color: var(--muted-fg); padding: 14px; text-align: center; }
 dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; font-size: 13px; }
 dt { color: var(--muted-fg); } dd { margin: 0; overflow-wrap: anywhere; }
+.banner { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; background: var(--warn-bg); color: var(--warn-fg); border: 1px solid color-mix(in srgb, var(--warn-fg) 30%, transparent); border-radius: 12px; padding: 12px 16px; font-weight: 500; }
+.banner[hidden] { display: none; }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg button.on { background: var(--primary-muted); color: var(--primary-muted-fg); border-color: var(--primary); }
+textarea { font: 12.5px/1.45 var(--mono); width: 100%; min-height: 150px; resize: vertical; padding: 10px; border: 1px solid var(--input); border-radius: 8px; background: var(--card); color: var(--foreground); }
+.jobs { border: 1px solid var(--border); border-radius: 8px; overflow: auto; max-height: 420px; }
+.jobs table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.jobs th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-fg); font-weight: 500; padding: 8px 10px; background: var(--muted); position: sticky; top: 0; }
+.jobs td { padding: 8px 10px; border-top: 1px solid var(--border); vertical-align: top; }
+.jobs tbody tr { cursor: pointer; } .jobs tbody tr:hover td { background: var(--muted); }
+.jobs td.t { white-space: nowrap; color: var(--muted-fg); font-variant-numeric: tabular-nums; }
+.jobs td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--muted-fg); }
+.jobs .title { font-weight: 500; overflow-wrap: anywhere; } .jobs .sub { color: var(--muted-fg); font-size: 12px; overflow-wrap: anywhere; }
+dialog { border: 1px solid var(--border); border-radius: 14px; padding: 0; width: min(1000px, calc(100vw - 32px)); max-height: calc(100vh - 32px); background: var(--card); color: var(--foreground); box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+dialog::backdrop { background: rgba(8, 17, 29, .5); }
+.dlg { display: grid; grid-template-rows: auto auto minmax(0, 1fr); max-height: calc(100vh - 34px); }
+.dlg-head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.dlg-head h2 { overflow-wrap: anywhere; } .dlg-head .sub { color: var(--muted-fg); font-size: 13px; margin-top: 2px; }
+.tabs { display: flex; gap: 4px; padding: 10px 18px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.tab { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; height: 34px; color: var(--muted-fg); }
+.tab:hover { background: transparent; color: var(--foreground); }
+.tab.on { color: var(--foreground); border-bottom-color: var(--primary); }
+.dlg-body { overflow: auto; padding: 18px; }
+.paper-wrap { display: flex; justify-content: center; background: var(--muted); border-radius: 10px; padding: 24px 12px; }
+.paper-wrap canvas { width: 100%; max-width: 420px; height: auto; background: #fff; box-shadow: 0 2px 10px rgba(15,27,45,.18); image-rendering: pixelated; }
+.lines td.c { font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.lines img { max-width: 220px; display: block; margin-top: 6px; border: 1px solid var(--border); background: #fff; }
+.hex { font: 12px/1.5 var(--mono); white-space: pre; overflow: auto; margin: 0; }
+.legend { color: var(--muted-fg); font-size: 12.5px; margin: 10px 0 0; text-align: center; }
 </style>
 </head>
 <body>
@@ -95,6 +124,10 @@ dt { color: var(--muted-fg); } dd { margin: 0; overflow-wrap: anywhere; }
 </header>
 
 <main>
+  <div class="banner" id="sim-banner" hidden>
+    <span id="sim-text">Modo simulación</span>
+    <button type="button" id="sim-off">Volver a imprimir</button>
+  </div>
   <div>
     <h1>Estado del agente</h1>
     <p class="sub">Imprime los tickets de la web del TPV y las comandas que llegan por la cola del servidor.</p>
@@ -143,6 +176,7 @@ dt { color: var(--muted-fg); } dd { margin: 0; overflow-wrap: anywhere; }
         <div class="actions">
           <button class="primary" type="submit">Imprimir prueba</button>
           <button type="button" id="t-drawer">Abrir cajón</button>
+          <button type="button" id="t-preview">Vista previa sin imprimir</button>
         </div>
       </form>
       <div class="msg" id="test-msg"></div>
@@ -193,11 +227,64 @@ dt { color: var(--muted-fg); } dd { margin: 0; overflow-wrap: anywhere; }
     </div>
   </section>
 
+  <section class="grid-2">
+    <div class="card">
+      <header><h2>Modo simulación</h2><span id="sim-badge"></span></header>
+      <p class="sub" style="margin:0">Mientras está activo no se imprime nada: los tickets de la web del TPV y de la cola se dan por impresos y solo se guardan para verlos aquí. Se desactiva solo al acabar el tiempo.</p>
+      <div class="seg" id="sim-seg">
+        <button type="button" data-min="30">30 minutos</button>
+        <button type="button" data-min="120">2 horas</button>
+        <button type="button" data-min="480">8 horas</button>
+        <button type="button" data-min="0">Desactivado</button>
+      </div>
+      <div class="msg" id="sim-msg"></div>
+    </div>
+    <div class="card">
+      <header><h2>Previsualizar un trabajo</h2></header>
+      <form id="json-form">
+        <label>JSON del trabajo <small>El que envía el TPV: { connection, lines, action }</small>
+          <textarea id="json-input" spellcheck="false" placeholder='{"connection":{"type":"file","params":"\\\\PC\\tickets"},"lines":[{"type":"text","content":"Mesa 12\n"}]}'></textarea>
+        </label>
+        <div class="actions"><button class="primary" type="submit">Ver vista previa</button></div>
+      </form>
+      <div class="msg" id="json-msg"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <header><h2>Trabajos recientes</h2><span class="actions"><button type="button" id="jobs-clear">Vaciar</button></span></header>
+    <p class="sub" style="margin:0">Los últimos 50 trabajos, impresos o simulados. Pulsa uno para ver el ticket tal como sale de la impresora. Solo se guardan en memoria: se pierden al reiniciar el servicio.</p>
+    <div class="jobs" id="jobs"><div class="empty">Todavía no se ha impreso nada desde que arrancó el servicio.</div></div>
+  </section>
+
   <section class="card">
     <header><h2>Actividad reciente</h2><button type="button" id="refresh-log">Actualizar</button></header>
     <div class="log" id="log"><div class="empty">Sin actividad todavía.</div></div>
   </section>
 </main>
+
+<dialog id="dlg" aria-labelledby="dlg-title">
+  <div class="dlg">
+    <div class="dlg-head">
+      <div><h2 id="dlg-title">Ticket</h2><div class="sub" id="dlg-sub"></div></div>
+      <div class="actions"><button type="button" id="dlg-png">Descargar PNG</button><button type="button" id="dlg-close">Cerrar</button></div>
+    </div>
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab on" data-tab="ticket" role="tab">Ticket</button>
+      <button type="button" class="tab" data-tab="lines" role="tab">Líneas</button>
+      <button type="button" class="tab" data-tab="bytes" role="tab">Bytes</button>
+    </div>
+    <div class="dlg-body">
+      <div data-pane="ticket">
+        <div class="msg" id="dlg-msg"></div>
+        <div class="paper-wrap"><canvas id="paper" width="576" height="200"></canvas></div>
+        <p class="legend">Dibujado a partir de los bytes ESC/POS enviados: la imagen va en blanco y negro como en la térmica. Los QR los genera la impresora; aquí se dibuja uno equivalente. En gris, lo que no se imprime (corte, cajón).</p>
+      </div>
+      <div data-pane="lines" hidden><div class="jobs lines" id="dlg-lines"></div></div>
+      <div data-pane="bytes" hidden><pre class="hex" id="dlg-hex"></pre></div>
+    </div>
+  </div>
+</dialog>
 
 <script>
 (() => {
@@ -257,6 +344,7 @@ dt { color: var(--muted-fg); } dd { margin: 0; overflow-wrap: anywhere; }
     $('u-install').hidden = !(u.available && state.platform === 'win32')
     $('tls').textContent = state.tls.present ? 'Válido hasta ' + fmtDate(state.tls.notAfter) : 'No generado'
     $('datadir').textContent = state.dataDir
+    applySim(c.simulateUntil)
   }
 
   async function refreshLog() {
@@ -346,7 +434,181 @@ dt { color: var(--muted-fg); } dd { margin: 0; overflow-wrap: anywhere; }
   })
   $('refresh-log').addEventListener('click', refreshLog)
 
-  refresh(); refreshLog(); loadPrinters()
+  // ---------------------------------------------------------------- simulación
+  function applySim(until) {
+    const on = !!until
+    $('sim-banner').hidden = !on
+    if (on) $('sim-text').textContent = 'Modo simulación: no se imprime nada hasta las ' + new Date(until).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) + '. Los tickets solo se guardan para verlos aquí.'
+    $('sim-badge').innerHTML = on ? badge('warn', 'Activo') : badge('neutral', 'Desactivado')
+    document.querySelectorAll('#sim-seg button').forEach((b) => b.classList.toggle('on', on ? false : b.dataset.min === '0'))
+  }
+  async function setSim(minutes) {
+    try {
+      const r = await api('simulate', { minutes })
+      applySim(r.simulateUntil)
+      say('sim-msg', r.simulateUntil ? 'warn' : 'ok', r.simulateUntil ? 'Activado. Nada se imprimirá hasta que se desactive.' : 'Desactivado: se vuelve a imprimir.')
+    } catch (e) { say('sim-msg', 'bad', e.message) }
+    refreshLog()
+  }
+  $('sim-seg').addEventListener('click', (ev) => { const b = ev.target.closest('[data-min]'); if (b) setSim(Number(b.dataset.min)) })
+  $('sim-off').addEventListener('click', () => setSim(0))
+
+  // ---------------------------------------------------------------- trabajos
+  const SOURCE = { web: ['neutral', 'Web TPV'], cola: ['neutral', 'Cola'], prueba: ['neutral', 'Prueba'], 'vista-previa': ['neutral', 'Vista previa'] }
+  async function refreshJobs() {
+    if ($('dlg').open) return
+    try {
+      const { jobs } = await api('jobs')
+      if (!jobs.length) { $('jobs').innerHTML = '<div class="empty">Todavía no se ha impreso nada desde que arrancó el servicio.</div>'; return }
+      $('jobs').innerHTML = '<table><thead><tr><th>Hora</th><th>Origen</th><th>Ticket</th><th>Estado</th><th style="text-align:right">Tiempo</th></tr></thead><tbody>' +
+        jobs.map((j) => {
+          const st = !j.ok ? badge('bad', 'Error') : j.simulated ? badge('warn', 'Sin imprimir') : badge('ok', 'Impreso')
+          const src = SOURCE[j.source] || ['neutral', j.source]
+          return `<tr data-id="${esc(j.id)}"><td class="t">${esc(new Date(j.at).toLocaleTimeString('es-ES'))}</td><td>${badge(src[0], src[1])}</td>` +
+            `<td><div class="title">${esc(j.title)}</div><div class="sub">${j.error ? esc(j.error.startsWith(j.target) ? j.error : j.target + ' · ' + j.error) : esc(j.target)}</div></td>` +
+            `<td>${st}</td><td class="n">${j.ms} ms</td></tr>`
+        }).join('') + '</tbody></table>'
+    } catch (e) {}
+  }
+  $('jobs').addEventListener('click', (ev) => { const tr = ev.target.closest('[data-id]'); if (tr) openJob(tr.dataset.id) })
+  $('jobs-clear').addEventListener('click', async () => { try { await api('jobs/clear', {}); refreshJobs() } catch (e) {} })
+
+  let currentJob = null
+  async function openJob(id) {
+    try {
+      const j = await api('jobs/' + encodeURIComponent(id))
+      currentJob = j
+      $('dlg-title').textContent = j.title
+      $('dlg-sub').textContent = new Date(j.at).toLocaleString('es-ES') + ' · ' + (SOURCE[j.source] || [0, j.source])[1] + ' · ' + j.target + ' · ' + j.bytes.toLocaleString('es-ES') + ' bytes'
+      const msg = $('dlg-msg')
+      if (!j.ok) say('dlg-msg', 'bad', 'No se imprimió: ' + j.error)
+      else if (j.simulated) say('dlg-msg', 'warn', 'Este trabajo no se envió a la impresora.')
+      else { msg.className = 'msg'; msg.textContent = '' }
+      drawTicket($('paper'), j.ops, j.paperWidth)
+      renderLines(j.job)
+      $('dlg-hex').textContent = j.hex ? hexDump(j.hex) + (j.hexTruncated ? '\n… (se muestran los primeros 64 KB)' : '') : 'No hay bytes: el trabajo falló antes de generarse.'
+      showTab('ticket')
+      if (!$('dlg').open) $('dlg').showModal()
+    } catch (e) { say('json-msg', 'bad', e.message) }
+  }
+  function showTab(name) {
+    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.dataset.tab === name))
+    document.querySelectorAll('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== name })
+    $('dlg-png').hidden = name !== 'ticket'
+  }
+  document.querySelector('.tabs').addEventListener('click', (ev) => { const t = ev.target.closest('[data-tab]'); if (t) showTab(t.dataset.tab) })
+  $('dlg-close').addEventListener('click', () => $('dlg').close())
+  $('dlg').addEventListener('close', refreshJobs)
+  $('dlg-png').addEventListener('click', () => {
+    $('paper').toBlob((blob) => {
+      if (!blob) return
+      const a = document.createElement('a')
+      const stamp = currentJob ? currentJob.at.replace(/[:.]/g, '-').slice(0, 19) : 'ticket'
+      a.href = URL.createObjectURL(blob)
+      a.download = 'ticket-' + stamp + '.png'
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000)
+    }, 'image/png')
+  })
+
+  function renderLines(job) {
+    const rows = (job.lines || []).map((l, i) => {
+      const img = (l.type === 'url_image' || l.type === 'image') && /^https?:/.test(l.content) ? `<img src="${esc(l.content)}" alt="" loading="lazy">` : ''
+      return `<tr><td class="n">${i + 1}</td><td>${esc(l.type)}</td><td class="c">${esc(l.content)}${img}</td></tr>`
+    }).join('')
+    const head = `<table><thead><tr><th>#</th><th>Tipo</th><th>Contenido</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="empty">Sin líneas</td></tr>'}</tbody></table>`
+    $('dlg-lines').innerHTML = `<div class="sub" style="padding:10px">Conexión: <span class="mono">${esc(job.connection.type)} · ${esc(job.connection.params)}</span> · acción: ${esc(job.action)}</div>` + head
+  }
+
+  function hexDump(hex) {
+    const out = []
+    for (let off = 0; off < hex.length / 2; off += 16) {
+      const chunk = hex.slice(off * 2, off * 2 + 32)
+      const bytes = chunk.match(/../g) || []
+      const ascii = bytes.map((h) => { const c = parseInt(h, 16); return c >= 32 && c < 127 ? String.fromCharCode(c) : '.' }).join('')
+      out.push(off.toString(16).padStart(6, '0') + '  ' + bytes.join(' ').padEnd(47) + '  ' + ascii)
+    }
+    return out.join('\n')
+  }
+
+  // Dibuja el ticket a escala 1 punto = 1 píxel. Fuente A de las térmicas: 12×24 puntos.
+  function drawTicket(canvas, ops, paperWidth) {
+    const W = paperWidth || 576, CW = 12, LH = 30, PAD = 16
+    const ctx = canvas.getContext('2d')
+    ctx.font = '100px "Cascadia Mono", Consolas, ui-monospace, monospace'
+    const ratio = ctx.measureText('M').width / 100
+    const blocks = []
+    let h = PAD
+    for (const o of ops) {
+      if (o.op === 'text') {
+        const scale = o.size || 1
+        const cols = Math.max(1, Math.floor(W / (CW * scale)))
+        const chunks = o.text.length ? o.text.match(new RegExp('.{1,' + cols + '}', 'gu')) : ['']
+        for (const t of chunks) { blocks.push({ kind: 'text', y: h, text: t, o, scale }); h += LH * scale }
+      } else if (o.op === 'feed') { h += LH * o.lines }
+      else if (o.op === 'image') { blocks.push({ kind: 'image', y: h, o }); h += o.height }
+      else if (o.op === 'cut') { blocks.push({ kind: 'cut', y: h + 6 }); h += 28 }
+      else if (o.op === 'drawer') { blocks.push({ kind: 'note', y: h, text: 'Cajón abierto' }); h += 26 }
+      else if (o.op === 'unknown') { blocks.push({ kind: 'note', y: h, text: 'Comando no reconocido: ' + o.bytes }); h += 22 }
+    }
+    h += PAD
+    canvas.width = W
+    canvas.height = Math.max(h, 80)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.textBaseline = 'top'
+    for (const b of blocks) {
+      if (b.kind === 'text') {
+        const cw = CW * b.scale
+        ctx.font = (b.o.bold ? 'bold ' : '') + (cw / ratio).toFixed(2) + 'px "Cascadia Mono", Consolas, ui-monospace, monospace'
+        ctx.fillStyle = '#111111'
+        const width = [...b.text].length * cw
+        const x = b.o.align === 'center' ? (W - width) / 2 : b.o.align === 'right' ? W - width : 0
+        let cx = x
+        for (const ch of b.text) { ctx.fillText(ch, cx, b.y + 3 * b.scale); cx += cw }
+      } else if (b.kind === 'image') {
+        const o = b.o
+        const raw = atob(o.bits)
+        const img = ctx.createImageData(o.width, o.height)
+        for (let y = 0; y < o.height; y++) {
+          for (let x = 0; x < o.width; x++) {
+            const on = raw.charCodeAt(y * o.bytesPerRow + (x >> 3)) & (0x80 >> (x & 7))
+            const p = (y * o.width + x) * 4
+            const v = on ? 17 : 255
+            img.data[p] = v; img.data[p + 1] = v; img.data[p + 2] = v; img.data[p + 3] = 255
+          }
+        }
+        const x = o.align === 'center' ? Math.round((W - o.width) / 2) : o.align === 'right' ? W - o.width : 0
+        ctx.putImageData(img, Math.max(0, x), b.y)
+      } else if (b.kind === 'cut') {
+        ctx.strokeStyle = '#9aa9b8'; ctx.setLineDash([8, 6]); ctx.lineWidth = 2
+        ctx.beginPath(); ctx.moveTo(0, b.y + 8); ctx.lineTo(W, b.y + 8); ctx.stroke(); ctx.setLineDash([])
+        ctx.font = '13px system-ui, sans-serif'; ctx.fillStyle = '#64748b'; ctx.fillText('corte', W - 46, b.y - 8)
+      } else if (b.kind === 'note') {
+        ctx.font = '14px system-ui, sans-serif'; ctx.fillStyle = '#64748b'; ctx.fillText('[' + b.text + ']', 0, b.y + 4)
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- vista previa de un JSON
+  $('json-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault(); const btn = ev.submitter
+    let job
+    try { job = JSON.parse($('json-input').value) } catch (e) { say('json-msg', 'bad', 'El JSON no es válido: ' + e.message); return }
+    busy(btn, true)
+    try { const r = await api('preview', { job }); say('json-msg', 'ok', 'Vista previa generada.'); await openJob(r.historyId) }
+    catch (e) { say('json-msg', 'bad', e.message) }
+    busy(btn, false); refreshJobs()
+  })
+  $('t-preview').addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget; busy(btn, true)
+    try { const r = await api('test', { kind: 'preview', connection: { type: 'preview', params: '' } }); await openJob(r.historyId) }
+    catch (e) { say('test-msg', 'bad', e.message) }
+    busy(btn, false); refreshJobs()
+  })
+
+  refresh(); refreshLog(); loadPrinters(); refreshJobs()
+  setInterval(refreshJobs, 5000)
   setInterval(refresh, 5000)
   setInterval(refreshLog, 10000)
 })()

@@ -8,11 +8,13 @@ import https from 'node:https'
 import os from 'node:os'
 import type { AgentStatus, QueueAgent } from './agent/queue-agent.js'
 import { pairAgent } from './agent/queue-agent.js'
-import { dataDir, sanitizeConfig, validPort, type Config } from './config.js'
+import { dataDir, isSimulating, sanitizeConfig, validPort, type Config } from './config.js'
+import { decodeEscPos } from './escpos/decoder.js'
+import { jobHistory, summarize } from './history.js'
 import { isCodepage } from './escpos/encoder.js'
 import { JobError, parseJob, type PrintJob } from './job.js'
 import { log, recentActivity } from './log.js'
-import type { PrintResult } from './printer.js'
+import type { PrintOptions, PrintResult } from './printer.js'
 import { tlsStatus, type TlsFiles } from './tls.js'
 import type { Updater } from './updater.js'
 import { PRODUCT, VERSION } from './version.js'
@@ -22,7 +24,7 @@ import adminHtml from './admin/index.html?raw'
 export interface AppContext {
   getConfig(): Config
   saveConfig(cfg: Config): void
-  print(job: PrintJob): Promise<PrintResult>
+  print(job: PrintJob, opts: PrintOptions): Promise<PrintResult>
   agent: Pick<QueueAgent, 'getStatus' | 'restart'>
   updater: Pick<Updater, 'getStatus' | 'check' | 'install'>
   tls: TlsFiles
@@ -81,7 +83,9 @@ async function handle(ctx: AppContext, req: http.IncomingMessage, res: http.Serv
         'content-type': 'text/html; charset=utf-8',
         'cache-control': 'no-store',
         'x-frame-options': 'DENY',
-        'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
+        // img-src: las líneas url_image del TPV se ven como miniatura; blob: para descargar el PNG
+        'content-security-policy':
+          "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; frame-ancestors 'none'"
       })
       res.end(adminHtml)
       return
@@ -99,6 +103,7 @@ function health(ctx: AppContext) {
     ok: true,
     name: PRODUCT,
     version: VERSION,
+    simulating: isSimulating(ctx.getConfig()),
     queue: { state: st.state, tpv: st.tpvName }
   }
 }
@@ -113,10 +118,10 @@ async function printFromRequest(ctx: AppContext, req: http.IncomingMessage, res:
     return sendJson(res, err.status, { ok: false, error: err.message })
   }
   try {
-    const r = await ctx.print(job)
+    const r = await ctx.print(job, { source: 'web' })
     const what = job.action === 'open_cash' ? 'Cajón abierto' : 'Impreso'
-    log('info', 'local', `${what} en ${r.target} (${r.ms} ms)`)
-    sendJson(res, 200, { ok: true, ms: r.ms })
+    if (!r.simulated) log('info', 'local', `${what} en ${r.target} (${r.ms} ms)`)
+    sendJson(res, 200, { ok: true, ms: r.ms, simulated: r.simulated })
   } catch (e) {
     const err = e instanceof JobError ? e : new JobError((e as Error).message)
     log('error', 'local', `No se pudo imprimir: ${err.message}`)
@@ -129,6 +134,12 @@ async function adminApi(ctx: AppContext, req: http.IncomingMessage, res: http.Se
   try {
     if (method === 'GET' && route === 'state') return sendJson(res, 200, adminState(ctx))
     if (method === 'GET' && route === 'activity') return sendJson(res, 200, { entries: recentActivity(200) })
+    if (method === 'GET' && route === 'jobs') return sendJson(res, 200, { jobs: jobHistory.list() })
+    if (method === 'GET' && route.startsWith('jobs/')) {
+      const rec = jobHistory.get(route.slice('jobs/'.length))
+      if (!rec) return sendJson(res, 404, { ok: false, error: 'Ese trabajo ya no está en el historial' })
+      return sendJson(res, 200, jobDetail(ctx, rec))
+    }
     if (method === 'GET' && route === 'printers') {
       return sendJson(res, 200, { printers: await listWindowsPrinters(true), supported: process.platform === 'win32' })
     }
@@ -174,15 +185,33 @@ async function adminApi(ctx: AppContext, req: http.IncomingMessage, res: http.Se
         return sendJson(res, 200, { ok: true })
       }
       case 'test': {
+        const preview = body.kind === 'preview'
         const job = parseJob({
-          connection: body.connection,
+          connection: preview ? { type: 'preview', params: '' } : body.connection,
           action: body.kind === 'drawer' ? 'open_cash' : 'print',
           lines: testLines()
         })
-        const r = await ctx.print(job)
-        log('info', 'local', `Prueba ${body.kind === 'drawer' ? 'de cajón' : 'de impresión'} en ${r.target}`)
-        return sendJson(res, 200, { ok: true, target: r.target, ms: r.ms })
+        const r = await ctx.print(job, { source: preview ? 'vista-previa' : 'prueba', previewOnly: preview })
+        if (!preview) log('info', 'local', `Prueba ${body.kind === 'drawer' ? 'de cajón' : 'de impresión'} en ${r.target}`)
+        return sendJson(res, 200, { ok: true, target: r.target, ms: r.ms, simulated: r.simulated, historyId: r.historyId })
       }
+      case 'preview': {
+        // Un trabajo pegado a mano (el JSON que envía el TPV): se genera sin imprimir.
+        const job = parseJob(body.job)
+        const r = await ctx.print(job, { source: 'vista-previa', previewOnly: true })
+        return sendJson(res, 200, { ok: true, historyId: r.historyId })
+      }
+      case 'simulate': {
+        const minutes = Number(body.minutes)
+        if (![0, 30, 120, 480].includes(minutes)) throw new JobError('Duración no válida', 400)
+        const until = minutes ? new Date(Date.now() + minutes * 60_000).toISOString() : null
+        ctx.saveConfig({ ...ctx.getConfig(), simulateUntil: until })
+        log('warn', 'sistema', until ? `Modo simulación activado hasta ${new Date(until).toLocaleString('es-ES')}: no se imprime nada` : 'Modo simulación desactivado')
+        return sendJson(res, 200, { ok: true, simulateUntil: until })
+      }
+      case 'jobs/clear':
+        jobHistory.clear()
+        return sendJson(res, 200, { ok: true })
       case 'update/check':
         return sendJson(res, 200, await ctx.updater.check())
       case 'update/install':
@@ -213,11 +242,26 @@ function adminState(ctx: AppContext) {
       maxImageWidth: cfg.maxImageWidth,
       allowedOrigins: cfg.allowedOrigins,
       updates: cfg.updates,
+      simulateUntil: isSimulating(cfg) ? cfg.simulateUntil : null,
       server: cfg.server ? { url: cfg.server.url, tpvId: cfg.server.tpvId, tpvName: cfg.server.tpvName } : null
     },
     agent: ctx.agent.getStatus(),
     updater: ctx.updater.getStatus(),
     tls: tlsStatus(ctx.tls)
+  }
+}
+
+const HEX_LIMIT = 64 * 1024
+
+function jobDetail(ctx: AppContext, rec: NonNullable<ReturnType<typeof jobHistory.get>>) {
+  const bytes = rec.bytes
+  return {
+    ...summarize(rec),
+    paperWidth: ctx.getConfig().maxImageWidth,
+    job: rec.job,
+    ops: bytes ? decodeEscPos(bytes) : [],
+    hex: bytes ? bytes.subarray(0, HEX_LIMIT).toString('hex') : '',
+    hexTruncated: !!bytes && bytes.length > HEX_LIMIT
   }
 }
 
@@ -232,7 +276,8 @@ function testLines() {
     { type: 'text', content: `Versión: ${VERSION}\n\n` },
     { type: 'text', content: 'Acentos: áéíóú ÁÉÍÓÚ ñÑ ü ç\n' },
     { type: 'text', content: 'Símbolos: 12,50 € ¿? ¡! º ª\n' },
-    { type: 'text', content: '-'.repeat(42) + '\n' }
+    { type: 'text', content: '-'.repeat(42) + '\n' },
+    { type: 'qr_code', content: 'https://github.com/JesusLizAlles/tpv-print-service' }
   ]
 }
 

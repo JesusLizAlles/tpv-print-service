@@ -3,7 +3,7 @@
 // El servicio de Windows no puede mostrar nada en el escritorio, así que este programita arranca
 // con la sesión de cada usuario y consulta al agente por su API local cada 5 segundos:
 //   verde  = el agente responde (y, si está vinculado, conectado a la cola del servidor)
-//   ámbar  = el agente responde pero no llega al servidor de la cola
+//   ámbar  = el agente responde pero no llega al servidor de la cola, o está en modo simulación
 //   rojo   = el agente no responde, o la vinculación ha sido revocada
 // Avisa con una notificación cuando falla un trabajo de la cola o el agente deja de responder.
 //
@@ -70,6 +70,7 @@ namespace TPVPrintTray
         public int Failed;
         public bool UpdateAvailable;
         public string Latest;
+        public string SimulateUntil;
     }
 
     static class Agent
@@ -139,6 +140,8 @@ namespace TPVPrintTray
                     s.Printed = Int(agent, "printed");
                     s.Failed = Int(agent, "failed");
                 }
+                Dictionary<string, object> cfg = Obj(st, "config");
+                if (cfg != null) s.SimulateUntil = Str(cfg, "simulateUntil");
                 Dictionary<string, object> upd = Obj(st, "updater");
                 if (upd != null)
                 {
@@ -300,6 +303,16 @@ namespace TPVPrintTray
                         text = "Conectando con el servidor…";
                         break;
                 }
+            }
+
+            if (s.Reachable && !string.IsNullOrEmpty(s.SimulateUntil))
+            {
+                // En simulación no se imprime nada: que se vea siempre, aunque todo lo demás vaya bien.
+                img = iconWarn;
+                DateTime until;
+                text = DateTime.TryParse(s.SimulateUntil, null, System.Globalization.DateTimeStyles.RoundtripKind, out until)
+                    ? "Simulación: no se imprime hasta las " + until.ToLocalTime().ToString("HH:mm")
+                    : "Simulación: no se imprime nada";
             }
 
             icon.Icon = img;

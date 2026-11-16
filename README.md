@@ -17,6 +17,12 @@ Windows** y sustituye al antiguo `servicio_impresion.py`:
 - **Panel** en `https://127.0.0.1:3000/admin` (solo desde el propio equipo): puerto, vinculación con
   el TPV, prueba de impresora, cajón, actividad y actualizaciones. Se abre con doble clic en el
   icono o desde el menú Inicio → TPV Print Service → Configurar impresión.
+- **Vista previa de los tickets**: el panel guarda los últimos 50 trabajos y dibuja cada uno a
+  partir de los bytes ESC/POS enviados, tal como saldría de la térmica (imágenes en blanco y negro
+  con su tramado, texto a 48 columnas con sus saltos, QR, cortes y cajón), con las líneas recibidas
+  y el volcado de bytes. Se descarga como PNG. También previsualiza un JSON pegado a mano.
+- **Modo simulación**: durante 30 minutos, 2 u 8 horas no se imprime nada; los trabajos se dan por
+  impresos y solo se guardan para la vista previa. El panel y el icono lo avisan mientras dura.
 - **Actualización automática** desde las Releases de este repositorio.
 
 Los instaladores están en [Releases](https://github.com/JesusLizAlles/tpv-print-service/releases).
@@ -43,6 +49,7 @@ El agente acepta los tipos de conexión que ya hay en la base de datos del TPV, 
 | | otra ruta | Escribe en ella |
 | `lan`, `ip`, `tcp` | `192.168.1.50` o `192.168.1.50:9100` | Directo a la impresora por TCP. No necesita driver ni recurso compartido. **Recomendado.** |
 | `windows` (nuevo) | Nombre de la impresora en Windows | Cola de Windows, datos en bruto (RAW) |
+| `preview` (nuevo) | Cualquiera | No imprime: solo guarda el trabajo para la vista previa |
 
 Tipos de línea: `text`, `setJustification` (`left`, `center`, `right`), `url_image` / `image` (PNG o
 JPEG por http/https; se reduce al ancho del papel), `qr` / `qr_code`, `feed`, `open_cash`.

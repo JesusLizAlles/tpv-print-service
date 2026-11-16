@@ -108,6 +108,21 @@ $r = Send-Job @{ type = 'file'; params = "\\$env:COMPUTERNAME\tickets" } 'POR-RE
 Write-Host ($r | ConvertTo-Json -Compress)
 Assert-Spooled 'POR-RECURSO-COMPARTIDO' 'por \\EQUIPO\recurso'
 
+Write-Host '== Historial, vista previa y modo simulación'
+$adminHeaders = @{ Origin = 'https://127.0.0.1:3000' }
+$jobs = (Invoke-RestMethod https://127.0.0.1:3000/api/admin/jobs).jobs
+if (@($jobs | Where-Object { $_.ok -and -not $_.simulated }).Count -lt 2) { throw 'El historial no recoge las impresiones' }
+$detail = Invoke-RestMethod ("https://127.0.0.1:3000/api/admin/jobs/" + $jobs[0].id)
+if (-not (@($detail.ops) | Where-Object { $_.op -eq 'text' -and $_.text -like 'POR-*' })) { throw 'La vista previa no reconstruye el texto del ticket' }
+Invoke-RestMethod -Method Post https://127.0.0.1:3000/api/admin/simulate -Headers $adminHeaders -ContentType 'application/json' -Body '{"minutes":30}' | Out-Null
+$before = @(Get-ChildItem $spool -Filter '*.SPL' -ErrorAction SilentlyContinue).Count
+$r = Send-Job @{ type = 'windows'; params = 'TPV E2E' } 'SIMULADO'
+if (-not $r.simulated) { throw 'En modo simulación la respuesta no lo indica' }
+Start-Sleep -Seconds 2
+if (@(Get-ChildItem $spool -Filter '*.SPL' -ErrorAction SilentlyContinue).Count -ne $before) { throw 'En modo simulación ha llegado un trabajo a la cola de Windows' }
+Invoke-RestMethod -Method Post https://127.0.0.1:3000/api/admin/simulate -Headers $adminHeaders -ContentType 'application/json' -Body '{"minutes":0}' | Out-Null
+Write-Host 'Historial con vista previa; en simulación no llega nada a la impresora'
+
 Write-Host '== Reinicio del servicio y acentos en el registro'
 Restart-Service TPVPrintService
 (Get-Service TPVPrintService).WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
