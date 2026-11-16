@@ -184,6 +184,15 @@ describe('QueueAgent', () => {
     expect(agent.getStatus().lastError).toMatch(/volver a vincular/)
   })
 
+  it('pasa a conectado enseguida aunque la cola esté vacía', async () => {
+    const srv = await mockServer()
+    cleanup.push(srv.close)
+    const { agent } = setup(srv.url)
+    agent.start()
+    await until(() => agent.getStatus().state === 'conectado', 500)
+    expect(srv.heartbeats.length).toBeGreaterThan(0)
+  })
+
   it('sin conexión reintenta con espera creciente', async () => {
     const { agent } = setup('http://127.0.0.1:1')
     agent.start()

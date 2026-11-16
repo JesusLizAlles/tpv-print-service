@@ -136,7 +136,14 @@ export class QueueAgent {
         continue
       }
       try {
-        if (this.status.state !== 'conectado') this.setState('conectando', link)
+        if (this.status.state !== 'conectado') {
+          // Un latido primero: confirma token y conexión al instante, sin esperar a que vuelva la
+          // primera espera larga de /claim (hasta 25 s con la cola vacía).
+          this.setState('conectando', link)
+          await this.post(link, '/api/print-agent/heartbeat', this.heartbeatBody(), 15_000)
+          this.setState('conectado', link)
+          this.status.lastContactAt = new Date().toISOString()
+        }
         const jobs = await this.claim(link)
         this.setState('conectado', link)
         this.status.lastContactAt = new Date().toISOString()
@@ -226,7 +233,15 @@ export class QueueAgent {
   private async heartbeat(): Promise<void> {
     const link = this.deps.getConfig().server
     if (!link || this.status.state === 'revocado') return
-    const req: HeartbeatRequest = {
+    try {
+      await this.post(link, '/api/print-agent/heartbeat', this.heartbeatBody(), 15_000)
+    } catch {
+      // el bucle de /claim ya refleja el estado de la conexión
+    }
+  }
+
+  private heartbeatBody(): HeartbeatRequest {
+    return {
       version: VERSION,
       machine: os.hostname(),
       uptime: Math.round((Date.now() - this.startedAt) / 1000),
@@ -234,11 +249,6 @@ export class QueueAgent {
       printed: this.status.printed,
       failed: this.status.failed,
       last_error: this.status.lastError
-    }
-    try {
-      await this.post(link, '/api/print-agent/heartbeat', req, 15_000)
-    } catch {
-      // el bucle de /claim ya refleja el estado de la conexión
     }
   }
 
