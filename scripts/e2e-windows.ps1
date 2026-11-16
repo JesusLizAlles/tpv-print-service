@@ -47,21 +47,26 @@ Add-PrinterPort -Name $out
 Add-Printer -Name 'TPV E2E' -DriverName 'Generic / Text Only' -PortName $out
 Set-Printer -Name 'TPV E2E' -Shared $true -ShareName 'tickets'
 
+# Un puerto local a fichero sobrescribe el fichero en cada trabajo: se comprueba uno a uno.
+function Assert-Printed([string]$Marker, [string]$What) {
+  $deadline = (Get-Date).AddSeconds(30)
+  do {
+    Start-Sleep -Seconds 1
+    $content = if (Test-Path $out) { [IO.File]::ReadAllText($out, [Text.Encoding]::GetEncoding(28591)) } else { '' }
+  } while (-not $content.Contains($Marker) -and (Get-Date) -lt $deadline)
+  if (-not $content.Contains($Marker)) { throw "La impresión $What no llegó al puerto" }
+  if (-not $content.StartsWith([string][char]0x1b + '@')) { throw "Impresión $What`: los bytes no llegan en bruto (falta ESC @ al principio)" }
+  Write-Host "Impresión $What`: $($content.Length) bytes en bruto en $out"
+  Remove-Item $out -ErrorAction SilentlyContinue
+}
+
 $r = Send-Job @{ type = 'windows'; params = 'TPV E2E' } 'POR-NOMBRE'
 Write-Host ($r | ConvertTo-Json -Compress)
-Start-Sleep -Seconds 3
+Assert-Printed 'POR-NOMBRE' 'por nombre de Windows'
+
 $r = Send-Job @{ type = 'file'; params = "\\$env:COMPUTERNAME\tickets" } 'POR-RECURSO-COMPARTIDO'
 Write-Host ($r | ConvertTo-Json -Compress)
-
-$deadline = (Get-Date).AddSeconds(30)
-do {
-  Start-Sleep -Seconds 2
-  $content = if (Test-Path $out) { [IO.File]::ReadAllText($out, [Text.Encoding]::GetEncoding(28591)) } else { '' }
-} while ((-not ($content.Contains('POR-NOMBRE') -and $content.Contains('POR-RECURSO-COMPARTIDO'))) -and (Get-Date) -lt $deadline)
-if (-not $content.Contains('POR-NOMBRE')) { throw 'La impresión por nombre de Windows no llegó al puerto' }
-if (-not $content.Contains('POR-RECURSO-COMPARTIDO')) { throw 'La impresión por \\EQUIPO\recurso no llegó al puerto' }
-if (-not $content.StartsWith([string][char]0x1b + '@')) { throw 'Los bytes no llegan en bruto (falta ESC @ al principio)' }
-Write-Host "Recibidos $($content.Length) bytes en $out"
+Assert-Printed 'POR-RECURSO-COMPARTIDO' 'por \\EQUIPO\recurso'
 
 Write-Host '== Desinstalación'
 $uninstaller = Get-ChildItem "${env:ProgramFiles}\TPV Print Service\unins*.exe" | Select-Object -First 1
