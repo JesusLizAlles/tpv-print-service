@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TPV Print Service</title>
+<style>
+:root {
+  --background: #f8fafc; --card: #ffffff; --foreground: #0f1b2d; --muted: #f1f5f9; --muted-fg: #64748b;
+  --primary: #003457; --primary-hover: #002a47; --primary-fg: #ffffff; --primary-muted: #eef5fa; --primary-muted-fg: #003457;
+  --border: #e7edf3; --input: #d3dce5;
+  --ok-bg: #ecfdf3; --ok-fg: #166534; --warn-bg: #fffbeb; --warn-fg: #92400e; --bad-bg: #fef2f2; --bad-fg: #991b1b;
+  --neutral-bg: #f1f5f9; --neutral-fg: #334155;
+  --shadow: 0 1px 2px rgba(15,27,45,.06), 0 1px 3px rgba(15,27,45,.05);
+  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --background: #08111d; --card: #0d1a2b; --foreground: #f1f5f9; --muted: #122036; --muted-fg: #9aa9b8;
+  --primary: #2f78b0; --primary-hover: #3b86c0; --primary-fg: #ffffff; --primary-muted: #0e2a40; --primary-muted-fg: #7aabcd;
+  --border: #1c2c44; --input: #2a3d57;
+  --ok-bg: #0c1f17; --ok-fg: #4ade80; --warn-bg: #241a08; --warn-fg: #fbbf24; --bad-bg: #2a1010; --bad-fg: #f87171;
+  --neutral-bg: #16243a; --neutral-fg: #d3dce5;
+  --shadow: 0 1px 2px rgba(0,0,0,.35);
+  color-scheme: dark;
+} }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--background); color: var(--foreground); font: 14px/1.5 var(--sans); }
+header.top { background: var(--card); border-bottom: 1px solid var(--border); }
+.top-inner { max-width: 1080px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.mark { width: 34px; height: 34px; border-radius: 9px; background: var(--primary); color: var(--primary-fg); display: grid; place-items: center; flex: none; }
+.brand { display: grid; line-height: 1.25; }
+.brand strong { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.brand span { font-size: 12.5px; color: var(--muted-fg); }
+.top-meta { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; color: var(--muted-fg); font-size: 13px; }
+main { max-width: 1080px; margin: 0 auto; padding: 24px; display: grid; gap: 22px; }
+h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+.sub { color: var(--muted-fg); margin: 2px 0 0; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.grid-2 { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 900px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .grid, .grid-2 { grid-template-columns: 1fr; } main { padding: 16px; } }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 18px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.card header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.kpi-label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-fg); font-weight: 500; }
+.kpi-value { font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
+.kpi-detail { font-size: 13px; color: var(--muted-fg); overflow-wrap: anywhere; }
+.badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.ok { background: var(--ok-bg); color: var(--ok-fg); } .warn { background: var(--warn-bg); color: var(--warn-fg); }
+.bad { background: var(--bad-bg); color: var(--bad-fg); } .neutral { background: var(--neutral-bg); color: var(--neutral-fg); }
+form { display: grid; gap: 12px; margin: 0; }
+.row { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
+label { display: grid; gap: 5px; font-size: 13px; font-weight: 500; }
+label small { font-weight: 400; color: var(--muted-fg); }
+input, select { font: inherit; height: 38px; padding: 0 11px; border: 1px solid var(--input); border-radius: 8px; background: var(--card); color: var(--foreground); min-width: 0; width: 100%; }
+input:focus, select:focus, button:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 35%, transparent); outline-offset: 1px; border-color: var(--primary); }
+.check { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.check input { width: 16px; height: 16px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+button { font: inherit; font-weight: 500; height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--input); background: var(--card); color: var(--foreground); cursor: pointer; transition: background .15s ease; }
+button:hover { background: var(--muted); }
+button.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-fg); }
+button.primary:hover { background: var(--primary-hover); }
+button.danger { color: var(--bad-fg); }
+button:disabled { opacity: .5; cursor: default; }
+.msg { font-size: 13px; padding: 9px 12px; border-radius: 8px; }
+.msg:empty { display: none; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.printers { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: inherit; font-size: 12.5px; height: auto; padding: 3px 10px; border-radius: 999px; background: var(--primary-muted); color: var(--primary-muted-fg); border: 0; }
+.log { max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.log table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.log td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.log tr:last-child td { border-bottom: 0; }
+.log td.t { white-space: nowrap; color: var(--muted-fg); font-variant-numeric: tabular-nums; width: 1%; }
+.log td.s { white-space: nowrap; width: 1%; }
+.empty { color: var(--muted-fg); padding: 14px; text-align: center; }
+dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; font-size: 13px; }
+dt { color: var(--muted-fg); } dd { margin: 0; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="mark" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+    </div>
+    <div class="brand"><strong>TPV Print Service</strong><span>Agente de impresión</span></div>
+    <div class="top-meta"><span id="machine">—</span><span class="badge neutral" id="version">—</span></div>
+  </div>
+</header>
+
+<main>
+  <div>
+    <h1>Estado del agente</h1>
+    <p class="sub">Imprime los tickets de la web del TPV y las comandas que llegan por la cola del servidor.</p>
+  </div>
+
+  <section class="grid" aria-label="Resumen">
+    <div class="card"><span class="kpi-label">API local</span><span class="kpi-value" id="k-local">—</span><span class="kpi-detail" id="k-local-d"></span></div>
+    <div class="card"><span class="kpi-label">Cola del servidor</span><span id="k-queue"></span><span class="kpi-detail" id="k-queue-d"></span></div>
+    <div class="card"><span class="kpi-label">Trabajos de la cola</span><span class="kpi-value" id="k-jobs">—</span><span class="kpi-detail" id="k-jobs-d"></span></div>
+    <div class="card"><span class="kpi-label">Actualizaciones</span><span id="k-upd"></span><span class="kpi-detail" id="k-upd-d"></span></div>
+  </section>
+
+  <section class="grid-2">
+    <div class="card">
+      <header><h2>Vinculación con el TPV</h2><span id="pair-badge"></span></header>
+      <div id="paired" hidden>
+        <dl>
+          <dt>TPV</dt><dd id="p-tpv"></dd>
+          <dt>Servidor</dt><dd id="p-server" class="mono"></dd>
+        </dl>
+        <div class="actions" style="margin-top:12px"><button class="danger" id="unpair" type="button">Desvincular</button></div>
+      </div>
+      <form id="pair-form" hidden>
+        <p class="sub" style="margin:0">En el admin del TPV, abre el terminal y pulsa «Vincular agente». Introduce aquí el código de 6 dígitos.</p>
+        <label>Servidor del TPV<input id="pair-server" type="url" placeholder="https://tpv.ejemplo.com" required></label>
+        <label>Código<input id="pair-code" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="000000" required autocomplete="off"></label>
+        <div class="actions"><button class="primary" type="submit">Vincular</button></div>
+      </form>
+      <div class="msg" id="pair-msg"></div>
+    </div>
+
+    <div class="card">
+      <header><h2>Probar una impresora</h2></header>
+      <form id="test-form">
+        <div class="row">
+          <label>Conexión
+            <select id="t-type">
+              <option value="windows">Impresora de Windows</option>
+              <option value="ip">IP (puerto 9100)</option>
+              <option value="file">Ruta o recurso compartido</option>
+            </select>
+          </label>
+          <label>Dirección <small id="t-hint">Nombre exacto en Windows</small><input id="t-params" required autocomplete="off"></label>
+        </div>
+        <div class="printers" id="printers"></div>
+        <div class="actions">
+          <button class="primary" type="submit">Imprimir prueba</button>
+          <button type="button" id="t-drawer">Abrir cajón</button>
+        </div>
+      </form>
+      <div class="msg" id="test-msg"></div>
+    </div>
+  </section>
+
+  <section class="grid-2">
+    <div class="card">
+      <header><h2>Configuración</h2></header>
+      <form id="cfg-form">
+        <div class="row">
+          <label>Puerto de la API local <small>Por defecto 3000. Debe coincidir con «Servicio IP» del TPV.</small><input id="c-port" type="number" min="1" max="65535" required></label>
+          <label>Página de códigos <small>Para acentos y €</small>
+            <select id="c-codepage">
+              <option value="cp858">PC858 (con €)</option>
+              <option value="cp850">PC850</option>
+              <option value="cp437">PC437</option>
+              <option value="cp1252">Windows-1252</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label>Ancho máximo de imagen <small>576 puntos en 80 mm, 384 en 58 mm</small><input id="c-width" type="number" min="128" max="2048" required></label>
+          <label>Franja de actualización <small>Horas, de inicio a fin</small>
+            <span style="display:flex;gap:8px"><input id="c-ws" type="number" min="0" max="24" aria-label="Hora de inicio"><input id="c-we" type="number" min="0" max="24" aria-label="Hora de fin"></span>
+          </label>
+        </div>
+        <label class="check"><input id="c-auto" type="checkbox"> Instalar actualizaciones automáticamente</label>
+        <div class="actions"><button class="primary" type="submit">Guardar</button></div>
+      </form>
+      <div class="msg" id="cfg-msg"></div>
+    </div>
+
+    <div class="card">
+      <header><h2>Versión y certificado</h2></header>
+      <dl>
+        <dt>Versión</dt><dd id="u-current"></dd>
+        <dt>Última publicada</dt><dd id="u-latest"></dd>
+        <dt>Comprobada</dt><dd id="u-checked"></dd>
+        <dt>Certificado HTTPS</dt><dd id="tls"></dd>
+        <dt>Datos</dt><dd id="datadir" class="mono"></dd>
+      </dl>
+      <div class="actions">
+        <button type="button" id="u-check">Buscar actualización</button>
+        <button class="primary" type="button" id="u-install" hidden>Instalar ahora</button>
+      </div>
+      <div class="msg" id="upd-msg"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <header><h2>Actividad reciente</h2><button type="button" id="refresh-log">Actualizar</button></header>
+    <div class="log" id="log"><div class="empty">Sin actividad todavía.</div></div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id)
+  const fmtDate = (s) => s ? new Date(s).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
+  const badge = (cls, text) => `<span class="badge ${cls}">${esc(text)}</span>`
+  function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) }
+
+  async function api(path, body) {
+    const opts = body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
+    const res = await fetch('/api/admin/' + path, opts)
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || data.ok === false) throw new Error(data.error || ('Error ' + res.status))
+    return data
+  }
+  function say(id, cls, text) { const el = $(id); el.className = 'msg ' + cls; el.textContent = text }
+  function busy(btn, on) { if (btn) btn.disabled = on }
+
+  const QUEUE = {
+    'sin-vincular': ['neutral', 'Sin vincular'],
+    'conectando': ['warn', 'Conectando'],
+    'conectado': ['ok', 'Conectado'],
+    'sin-conexion': ['bad', 'Sin conexión'],
+    'revocado': ['bad', 'Vinculación revocada']
+  }
+  let state = null
+  let cfgLoaded = false
+
+  async function refresh() {
+    try { state = await api('state') } catch (e) { return }
+    const c = state.config, a = state.agent, u = state.updater
+    $('machine').textContent = state.machine
+    $('version').textContent = 'v' + state.version
+    $('k-local').textContent = (c.https ? 'https' : 'http') + '://127.0.0.1:' + c.port
+    $('k-local-d').textContent = c.allowedOrigins.includes('*') ? 'Acepta cualquier origen' : 'Orígenes: ' + c.allowedOrigins.join(', ')
+    const q = QUEUE[a.state] || ['neutral', a.state]
+    $('k-queue').innerHTML = badge(q[0], q[1])
+    $('k-queue-d').textContent = a.state === 'conectado' ? 'Último contacto ' + fmtDate(a.lastContactAt) : (a.lastError || (c.server ? '' : 'Vincula el agente para recibir comandas'))
+    $('k-jobs').textContent = a.printed + ' impresos'
+    $('k-jobs-d').textContent = a.failed ? a.failed + ' con error · ' + a.inFlight + ' en curso' : a.inFlight + ' en curso'
+    $('k-upd').innerHTML = u.available ? badge('warn', 'v' + u.latest + ' disponible') : u.state === 'error' ? badge('bad', 'Error') : badge('ok', 'Al día')
+    $('k-upd-d').textContent = u.error || (c.updates.auto ? 'Automáticas de ' + c.updates.windowStart + ':00 a ' + c.updates.windowEnd + ':00' : 'Automáticas desactivadas')
+
+    $('pair-badge').innerHTML = badge(q[0], c.server ? q[1] : 'Sin vincular')
+    $('paired').hidden = !c.server
+    $('pair-form').hidden = !!c.server
+    if (c.server) { $('p-tpv').textContent = c.server.tpvName || c.server.tpvId; $('p-server').textContent = c.server.url }
+
+    if (!cfgLoaded) {
+      $('c-port').value = c.port; $('c-codepage').value = c.codepage; $('c-width').value = c.maxImageWidth
+      $('c-ws').value = c.updates.windowStart; $('c-we').value = c.updates.windowEnd; $('c-auto').checked = c.updates.auto
+      cfgLoaded = true
+    }
+    $('u-current').textContent = 'v' + u.current
+    $('u-latest').textContent = u.latest ? 'v' + u.latest : '—'
+    $('u-checked').textContent = fmtDate(u.checkedAt)
+    $('u-install').hidden = !(u.available && state.platform === 'win32')
+    $('tls').textContent = state.tls.present ? 'Válido hasta ' + fmtDate(state.tls.notAfter) : 'No generado'
+    $('datadir').textContent = state.dataDir
+  }
+
+  async function refreshLog() {
+    try {
+      const { entries } = await api('activity')
+      if (!entries.length) { $('log').innerHTML = '<div class="empty">Sin actividad todavía.</div>'; return }
+      const cls = { info: 'neutral', warn: 'warn', error: 'bad' }
+      $('log').innerHTML = '<table>' + entries.map((e) =>
+        `<tr><td class="t">${esc(fmtDate(e.at))}</td><td class="s">${badge(cls[e.level], e.source)}</td><td>${esc(e.message)}</td></tr>`).join('') + '</table>'
+    } catch (e) {}
+  }
+
+  async function loadPrinters() {
+    try {
+      const { printers, supported } = await api('printers')
+      if (!supported || !printers.length) return
+      $('printers').innerHTML = printers.map((p) => `<button type="button" class="chip" data-name="${esc(p.name)}" title="${esc(p.portName)}">${esc(p.name)}</button>`).join('')
+    } catch (e) {}
+  }
+  $('printers').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-name]'); if (!b) return
+    $('t-type').value = 'windows'; $('t-params').value = b.dataset.name; hint()
+  })
+  function hint() {
+    const t = $('t-type').value
+    $('t-hint').textContent = t === 'windows' ? 'Nombre exacto en Windows' : t === 'ip' ? 'IP o IP:puerto' : 'p. ej. \\\\EQUIPO\\recurso o COM3'
+  }
+  $('t-type').addEventListener('change', hint)
+
+  async function test(kind, btn) {
+    const connection = { type: $('t-type').value, params: $('t-params').value }
+    if (!connection.params) { say('test-msg', 'bad', 'Indica la dirección de la impresora.'); return }
+    busy(btn, true)
+    try {
+      const r = await api('test', { connection, kind })
+      say('test-msg', 'ok', (kind === 'drawer' ? 'Cajón abierto en ' : 'Prueba enviada a ') + r.target + ' (' + r.ms + ' ms).')
+    } catch (e) { say('test-msg', 'bad', e.message) }
+    busy(btn, false); refreshLog()
+  }
+  $('test-form').addEventListener('submit', (ev) => { ev.preventDefault(); test('print', ev.submitter) })
+  $('t-drawer').addEventListener('click', (ev) => test('drawer', ev.currentTarget))
+
+  $('pair-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault(); const btn = ev.submitter; busy(btn, true)
+    try {
+      const r = await api('pair', { server: $('pair-server').value, code: $('pair-code').value })
+      say('pair-msg', 'ok', 'Vinculado al TPV ' + r.tpv + '.'); $('pair-code').value = ''
+    } catch (e) { say('pair-msg', 'bad', e.message) }
+    busy(btn, false); refresh(); refreshLog()
+  })
+  $('unpair').addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget
+    if (btn.dataset.confirm !== '1') { btn.dataset.confirm = '1'; btn.textContent = 'Sí, desvincular'; return }
+    busy(btn, true)
+    try { await api('unpair', {}); say('pair-msg', 'neutral', 'Agente desvinculado. Las comandas de la cola ya no se imprimen aquí.') }
+    catch (e) { say('pair-msg', 'bad', e.message) }
+    btn.dataset.confirm = ''; btn.textContent = 'Desvincular'; busy(btn, false); refresh()
+  })
+
+  $('cfg-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault(); const btn = ev.submitter; busy(btn, true)
+    try {
+      const r = await api('config', {
+        port: Number($('c-port').value), codepage: $('c-codepage').value, maxImageWidth: Number($('c-width').value),
+        autoUpdate: $('c-auto').checked, windowStart: Number($('c-ws').value), windowEnd: Number($('c-we').value)
+      })
+      if (r.restart) {
+        say('cfg-msg', 'warn', 'Guardado. El agente se reinicia en el puerto ' + r.port + '. Abriendo la nueva dirección…')
+        setTimeout(() => { location.href = location.protocol + '//127.0.0.1:' + r.port + '/admin' }, 4000)
+      } else say('cfg-msg', 'ok', 'Configuración guardada.')
+    } catch (e) { say('cfg-msg', 'bad', e.message) }
+    busy(btn, false)
+  })
+
+  $('u-check').addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget; busy(btn, true)
+    try {
+      const u = await api('update/check', {})
+      say('upd-msg', u.state === 'error' ? 'bad' : 'neutral', u.error || (u.available ? 'Hay una versión nueva: v' + u.latest + '.' : 'Ya tienes la última versión.'))
+    } catch (e) { say('upd-msg', 'bad', e.message) }
+    busy(btn, false); refresh()
+  })
+  $('u-install').addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget; busy(btn, true)
+    try { await api('update/install', {}); say('upd-msg', 'warn', 'Instalando. El servicio se reiniciará en unos segundos; recarga la página después.') }
+    catch (e) { say('upd-msg', 'bad', e.message); busy(btn, false) }
+  })
+  $('refresh-log').addEventListener('click', refreshLog)
+
+  refresh(); refreshLog(); loadPrinters()
+  setInterval(refresh, 5000)
+  setInterval(refreshLog, 10000)
+})()
+</script>
+</body>
+</html>

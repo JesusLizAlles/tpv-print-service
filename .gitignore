@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+*.log
+.env
+.env.*
+*.tsbuildinfo
+# Datos locales del agente en desarrollo (config, certificados, registro)
+.data/

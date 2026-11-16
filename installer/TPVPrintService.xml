@@ -1,0 +1,25 @@
+<!--
+  Servicio de Windows (WinSW 2.x). WinSW arranca node.exe con el agente, guarda su salida en
+  %ProgramData%\TPVPrint\logs (rotando a los 5 MB) y lo vuelve a arrancar si se cierra:
+  el agente sale con código 3 para reiniciarse tras cambiar el puerto.
+-->
+<service>
+  <id>TPVPrintService</id>
+  <name>TPV Print Service</name>
+  <description>Agente de impresión del TPV: imprime tickets y comandas en las impresoras de este equipo.</description>
+  <executable>%BASE%\node\node.exe</executable>
+  <arguments>"%BASE%\app\agent.cjs" run</arguments>
+  <workingdirectory>%BASE%\app</workingdirectory>
+  <startmode>Automatic</startmode>
+  <env name="TPVPRINT_DATA" value="%ProgramData%\TPVPrint" />
+  <logpath>%ProgramData%\TPVPrint\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>5120</sizeThreshold>
+    <keepFiles>5</keepFiles>
+  </log>
+  <onfailure action="restart" delay="2 sec" />
+  <onfailure action="restart" delay="10 sec" />
+  <onfailure action="restart" delay="30 sec" />
+  <resetfailure>1 hour</resetfailure>
+  <stoptimeout>10 sec</stoptimeout>
+</service>
