@@ -56,7 +56,8 @@ JPEG por http/https; se reduce al ancho del papel), `qr` / `qr_code`, `feed`, `o
 |---|---|---|
 | `config.json` | Puerto, página de códigos, servidor vinculado (sin el token), actualizaciones | Usuarios: lectura |
 | `printed.json` | Ids de los últimos 1.000 trabajos impresos de la cola | Usuarios: lectura |
-| `logs\` | Registro del servicio (WinSW, rota a los 5 MB) | Usuarios: lectura |
+| `logs\agent.log` | Registro del agente en UTF-8 (rota a los 5 MB, guarda 3) | Usuarios: lectura |
+| `logs\TPVPrintService.*.log` | Registro de WinSW (arranques, paradas, errores graves) | Usuarios: lectura |
 | `updates\` | Instaladores descargados | Usuarios: lectura |
 | `private\credentials.json` | Token del agente | Solo SYSTEM y Administradores |
 | `private\tls\` | Certificado HTTPS de `127.0.0.1` y su clave | Solo SYSTEM y Administradores |

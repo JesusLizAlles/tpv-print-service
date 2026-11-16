@@ -14,7 +14,7 @@ function Wait-Health([int]$Port, [int]$Seconds = 60) {
   while ((Get-Date) -lt $deadline) {
     try { return Invoke-RestMethod -Uri "https://127.0.0.1:$Port/health" -TimeoutSec 5 } catch { Start-Sleep -Seconds 2 }
   }
-  Get-Content "$env:ProgramData\TPVPrint\logs\*.log" -ErrorAction SilentlyContinue | Select-Object -Last 50
+  Get-Content "$env:ProgramData\TPVPrint\logs\*.log" -Encoding UTF8 -ErrorAction SilentlyContinue | Select-Object -Last 50
   throw "El agente no responde en https://127.0.0.1:$Port/health (¿certificado no confiable o servicio parado?)"
 }
 
@@ -102,7 +102,7 @@ Write-Host '== Reinicio del servicio y acentos en el registro'
 Restart-Service TPVPrintService
 (Get-Service TPVPrintService).WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
 Wait-Health 3000 | Out-Null
-$log = Get-Content "$env:ProgramData\TPVPrint\logs\TPVPrintService.out.log" -Raw -Encoding UTF8
+$log = Get-Content "$env:ProgramData\TPVPrint\logs\agent.log" -Raw -Encoding UTF8
 if ($log -notmatch 'señal de parada') { Write-Host $log; throw 'El registro no muestra bien los acentos (se esperaba «señal de parada»)' }
 Write-Host 'Registro en UTF-8 correcto tras reiniciar'
 
